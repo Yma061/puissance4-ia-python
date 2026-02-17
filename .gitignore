@@ -1,6 +1,18 @@
 #aide txt git
 *.txt
 
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+venv/
+.env
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+venv/
+.env
 
-#pycache
-_pycache_/
