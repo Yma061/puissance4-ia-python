@@ -1,0 +1,6 @@
+#aide txt git
+*.txt
+
+
+#pycache
+_pycache_/
