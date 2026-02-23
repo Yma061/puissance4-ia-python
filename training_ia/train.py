@@ -98,3 +98,6 @@ except KeyboardInterrupt:
 finally:
     torch.save(model.state_dict(), model_path)
     print("Modèle sauvegardé.")
+
+import subprocess
+subprocess.run(["python", "-m", "training_ia.watch_selfplay"])
