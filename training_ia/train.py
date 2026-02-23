@@ -78,6 +78,14 @@ for episode in range(EPISODES):
 
     if EPSILON > EPSILON_MIN:
         EPSILON *= EPSILON_DECAY
+    if episode % 100 == 0:
+        print(f"Episode {episode}")
 
-torch.save(model.state_dict(), "../models/connect4_model.pth")
+import os
+
+model_dir = os.path.join(os.path.dirname(__file__), "..", "models")
+os.makedirs(model_dir, exist_ok=True)
+
+model_path = os.path.join(model_dir, "connect4_model.pth")
+torch.save(model.state_dict(), model_path)
 print("Self-play training terminé.")
