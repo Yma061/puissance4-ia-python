@@ -1,48 +1,123 @@
 import customtkinter as ctk
-import numpy as np
+import math
+
 from game.board import *
 from game.rules import winning_move
-from game.ai import minimax
-import math
+from game.ai_minimax import minimax
+from game.ai_deep import predict_move
+
 
 PLAYER_PIECE = 1
 AI_PIECE = 2
 
-class Connect4UI(ctk.CTk):
+
+# =====================================================
+# MENU PRINCIPAL
+# =====================================================
+
+class MainMenu(ctk.CTk):
 
     def __init__(self):
         super().__init__()
 
-        self.title("Puissance 4 - IA")
-        self.geometry("700x700")
+        self.title("Puissance 4")
+        self.geometry("500x500")
 
         ctk.set_appearance_mode("dark")
         ctk.set_default_color_theme("blue")
 
-        self.board = create_board()
-        self.turn = 0  # 0 = joueur, 1 = IA
+        self.create_widgets()
 
-        self.buttons = []
+    def create_widgets(self):
+
+        title = ctk.CTkLabel(
+            self,
+            text="🎮 PUISSANCE 4",
+            font=("Arial", 32, "bold")
+        )
+        title.pack(pady=40)
+
+        ctk.CTkButton(
+            self,
+            text="👥 Jouer en 1 vs 1",
+            height=50,
+            command=self.start_1v1
+        ).pack(pady=10)
+
+        ctk.CTkButton(
+            self,
+            text="🤖 Jouer contre IA Minimax",
+            height=50,
+            command=self.start_minimax
+        ).pack(pady=10)
+
+        ctk.CTkButton(
+            self,
+            text="🧠 Jouer contre IA Deep Learning",
+            height=50,
+            command=self.start_deep
+        ).pack(pady=10)
+
+        ctk.CTkButton(
+            self,
+            text="❌ Quitter",
+            height=50,
+            fg_color="red",
+            command=self.destroy
+        ).pack(pady=20)
+
+    def start_1v1(self):
+        self.destroy()
+        Connect4UI(mode="1v1").mainloop()
+
+    def start_minimax(self):
+        self.destroy()
+        Connect4UI(mode="minimax").mainloop()
+
+    def start_deep(self):
+        self.destroy()
+        Connect4UI(mode="deep").mainloop()
+
+
+# =====================================================
+# FENÊTRE DE JEU
+# =====================================================
+
+class Connect4UI(ctk.CTk):
+
+    def __init__(self, mode="minimax"):
+        super().__init__()
+
+        self.title("Puissance 4 - Jeu")
+        self.geometry("720x720")
+
+        self.mode = mode
+        self.board = create_board()
+        self.turn = 0
+        self.game_over = False
+
         self.cells = []
 
         self.create_widgets()
         self.draw_board()
 
+    # -------------------------------------------------
+
     def create_widgets(self):
 
+        # Boutons colonnes
         top_frame = ctk.CTkFrame(self)
         top_frame.pack(pady=10)
 
         for col in range(COLUMN_COUNT):
-            btn = ctk.CTkButton(
+            ctk.CTkButton(
                 top_frame,
                 text=str(col),
-                width=60,
-                command=lambda c=col: self.player_move(c)
-            )
-            btn.grid(row=0, column=col, padx=5)
-            self.buttons.append(btn)
+                width=70,
+                command=lambda c=col: self.play_turn(c)
+            ).grid(row=0, column=col, padx=5)
 
+        # Grille visuelle
         self.grid_frame = ctk.CTkFrame(self)
         self.grid_frame.pack(pady=20)
 
@@ -51,17 +126,20 @@ class Connect4UI(ctk.CTk):
             for c in range(COLUMN_COUNT):
                 cell = ctk.CTkLabel(
                     self.grid_frame,
-                    text=" ",
-                    width=60,
-                    height=60,
-                    corner_radius=30,
+                    text="",
+                    width=70,
+                    height=70,
+                    corner_radius=35,
                     fg_color="gray"
                 )
                 cell.grid(row=r, column=c, padx=5, pady=5)
                 row_cells.append(cell)
             self.cells.append(row_cells)
 
+    # -------------------------------------------------
+
     def draw_board(self):
+
         for r in range(ROW_COUNT):
             for c in range(COLUMN_COUNT):
 
@@ -76,42 +154,104 @@ class Connect4UI(ctk.CTk):
 
                 self.cells[ROW_COUNT - 1 - r][c].configure(fg_color=color)
 
-    def player_move(self, col):
+    # -------------------------------------------------
 
-        if is_valid_location(self.board, col):
+    def play_turn(self, col):
 
-            row = get_next_open_row(self.board, col)
+        if self.game_over:
+            return
+
+        if not is_valid_location(self.board, col):
+            return
+
+        row = get_next_open_row(self.board, col)
+
+        # ------------------ 1v1 ------------------
+        if self.mode == "1v1":
+
+            piece = PLAYER_PIECE if self.turn == 0 else AI_PIECE
+            drop_piece(self.board, row, col, piece)
+
+            if winning_move(self.board, piece):
+                self.draw_board()
+                winner = "🔴 Joueur 1 gagne !" if piece == 1 else "🟡 Joueur 2 gagne !"
+                self.show_winner(winner)
+                self.game_over = True
+                return
+
+            self.turn = 1 - self.turn
+            self.draw_board()
+
+        # ------------------ VS IA ------------------
+        else:
+
+            # Coup joueur
             drop_piece(self.board, row, col, PLAYER_PIECE)
 
             if winning_move(self.board, PLAYER_PIECE):
-                self.show_winner("Tu as gagné !")
+                self.draw_board()
+                self.show_winner("🎉 Tu as gagné !")
+                self.game_over = True
                 return
 
             self.draw_board()
+
+            # Laisser petit délai pour IA
             self.after(300, self.ai_move)
+
+    # -------------------------------------------------
 
     def ai_move(self):
 
-        col, _ = minimax(self.board, 4, -math.inf, math.inf, True)
+        if self.game_over:
+            return
 
-        if is_valid_location(self.board, col):
+        # Choix IA selon mode
+        if self.mode == "minimax":
+            col, _ = minimax(self.board, 4, -math.inf, math.inf, True)
 
-            row = get_next_open_row(self.board, col)
-            drop_piece(self.board, row, col, AI_PIECE)
+        elif self.mode == "deep":
+            col = predict_move(self.board)
 
-            if winning_move(self.board, AI_PIECE):
-                self.show_winner("L'IA a gagné !")
-                return
+        else:
+            return
 
+        if not is_valid_location(self.board, col):
+            return
+
+        row = get_next_open_row(self.board, col)
+        drop_piece(self.board, row, col, AI_PIECE)
+
+        if winning_move(self.board, AI_PIECE):
             self.draw_board()
+            self.show_winner("🤖 L'IA a gagné !")
+            self.game_over = True
+            return
+
+        self.draw_board()
+
+    # -------------------------------------------------
 
     def show_winner(self, message):
+
         popup = ctk.CTkToplevel(self)
         popup.geometry("300x150")
         popup.title("Fin de partie")
 
-        label = ctk.CTkLabel(popup, text=message, font=("Arial", 18))
-        label.pack(pady=20)
+        ctk.CTkLabel(
+            popup,
+            text=message,
+            font=("Arial", 18)
+        ).pack(pady=20)
 
-        btn = ctk.CTkButton(popup, text="Quitter", command=self.destroy)
-        btn.pack(pady=10)
+        ctk.CTkButton(
+            popup,
+            text="Retour Menu",
+            command=self.return_menu
+        ).pack(pady=10)
+
+    # -------------------------------------------------
+
+    def return_menu(self):
+        self.destroy()
+        MainMenu().mainloop()

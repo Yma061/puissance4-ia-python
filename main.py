@@ -1,5 +1,5 @@
-from ui.display import Connect4UI
+from ui.display import MainMenu
 
 if __name__ == "__main__":
-    app = Connect4UI()
+    app = MainMenu()
     app.mainloop()
