@@ -52,8 +52,8 @@ for episode in range(EPISODES):
                 target = 0
 
             output = model(last_state)[0][last_action]
-            loss = loss_fn(output, torch.tensor(target).to(device))
-
+            target_tensor = torch.tensor(target, dtype=torch.float32, device=device)
+            loss = loss_fn(output, target_tensor)
             optimizer.zero_grad()
             loss.backward()
             optimizer.step()
