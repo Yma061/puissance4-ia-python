@@ -65,7 +65,8 @@ for episode in range(EPISODES):
                 target += GAMMA * torch.max(model(next_state)).item()
 
         output = model(state)[0][action]
-        loss = loss_fn(output, torch.tensor(target).to(device))
+        target_tensor = torch.tensor(target, dtype=torch.float32, device=device)
+        loss = loss_fn(output, target_tensor)
 
         optimizer.zero_grad()
         loss.backward()
