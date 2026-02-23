@@ -77,3 +77,14 @@ print("Résultats :")
 print("Deep IA :", deep_wins)
 print("Minimax :", minimax_wins)
 print("Nuls :", draws)
+# ===== Q-values finales plateau vide =====
+empty_board = create_board()
+state = np.copy(empty_board)
+state[state == 2] = -1
+state_tensor = torch.tensor(state, dtype=torch.float32, device=device).unsqueeze(0)
+
+with torch.no_grad():
+    final_q = model(state_tensor).squeeze(0).cpu().numpy()
+
+print("\nQ-values finales (plateau vide):")
+print(np.round(final_q, 3))

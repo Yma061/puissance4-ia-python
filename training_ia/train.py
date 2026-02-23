@@ -10,7 +10,7 @@ from training_ia.environment import Connect4SelfPlayEnv
 from game.board import is_valid_location
 
 # ===== Hyperparamètres =====
-EPISODES = 100000
+EPISODES = 5000
 GAMMA = 0.99
 EPSILON = 1.0
 EPSILON_DECAY = 0.995
@@ -110,8 +110,19 @@ try:
         if EPSILON > EPSILON_MIN:
             EPSILON *= EPSILON_DECAY
 
-        if episode % 500 == 0:
-            print(f"Episode {episode} | Epsilon {EPSILON:.3f}")
+        if episode % 1000 == 0:
+            empty_state = env.reset()
+            empty_tensor = torch.tensor(empty_state, dtype=torch.float32, device=device).unsqueeze(0)
+
+            with torch.no_grad():
+                q_values = policy_net(empty_tensor).squeeze(0).cpu().numpy()
+
+            print("====================================")
+            print(f"Episode {episode}")
+            print(f"Epsilon: {EPSILON:.3f}")
+            print("Q-values (plateau vide):")
+            print(np.round(q_values, 3))
+            print("====================================")
 
     print("Training terminé.")
 
