@@ -3,101 +3,125 @@ import torch.nn as nn
 import torch.optim as optim
 import random
 import numpy as np
+from collections import deque
 
 from training_ia.model import Connect4Net
 from training_ia.environment import Connect4SelfPlayEnv
+from game.board import is_valid_location
 
-
-EPISODES = 5000
+# ===== Hyperparamètres =====
+EPISODES = 100000
 GAMMA = 0.99
 EPSILON = 1.0
-EPSILON_DECAY = 0.999
-EPSILON_MIN = 0.1
+EPSILON_DECAY = 0.995
+EPSILON_MIN = 0.05
+LR = 0.0005
+BATCH_SIZE = 64
+TARGET_UPDATE = 1000
+MEMORY_SIZE = 50000
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-model = Connect4Net().to(device)
-optimizer = optim.Adam(model.parameters(), lr=0.001)
+# ===== Réseaux =====
+policy_net = Connect4Net().to(device)
+target_net = Connect4Net().to(device)
+target_net.load_state_dict(policy_net.state_dict())
+target_net.eval()
+
+optimizer = optim.Adam(policy_net.parameters(), lr=LR)
 loss_fn = nn.MSELoss()
+
+memory = deque(maxlen=MEMORY_SIZE)
 
 env = Connect4SelfPlayEnv()
 
-try :
+# ===== Replay Buffer Training =====
+def replay():
+    if len(memory) < BATCH_SIZE:
+        return
+
+    batch = random.sample(memory, BATCH_SIZE)
+
+    states, actions, rewards, next_states, dones = zip(*batch)
+
+    states = torch.tensor(states, dtype=torch.float32, device=device)
+    actions = torch.tensor(actions, dtype=torch.long, device=device)
+    rewards = torch.tensor(rewards, dtype=torch.float32, device=device)
+    next_states = torch.tensor(next_states, dtype=torch.float32, device=device)
+    dones = torch.tensor(dones, dtype=torch.float32, device=device)
+
+    q_values = policy_net(states)
+    current_q = q_values.gather(1, actions.unsqueeze(1)).squeeze(1)
+
+    # ===== Double DQN =====
+    next_actions = policy_net(next_states).argmax(1)
+    next_q = target_net(next_states).gather(1, next_actions.unsqueeze(1)).squeeze(1)
+
+    target_q = rewards + GAMMA * next_q * (1 - dones)
+
+    loss = loss_fn(current_q, target_q.detach())
+
+    optimizer.zero_grad()
+    loss.backward()
+    optimizer.step()
+
+
+try:
+    step_count = 0
 
     for episode in range(EPISODES):
 
-        state = torch.FloatTensor(env.reset()).unsqueeze(0).to(device)
+        state = env.reset()
         done = False
-
-        last_state = None
-        last_action = None
 
         while not done:
 
+            state_tensor = torch.tensor(state, dtype=torch.float32, device=device).unsqueeze(0)
+
+            # ===== ACTION MASKING =====
+            valid_moves = [c for c in range(7) if is_valid_location(env.board, c)]
+
             if random.random() < EPSILON:
-                action = random.randint(0, 6)
+                action = random.choice(valid_moves)
             else:
                 with torch.no_grad():
-                    q_values = model(state)
-                    action = torch.argmax(q_values).item()
+                    q_values = policy_net(state_tensor).squeeze(0).cpu().numpy()
 
-            next_state_np, reward, done = env.step(action)
-            next_state = torch.FloatTensor(next_state_np).unsqueeze(0).to(device)
+                masked_q = np.full(7, -np.inf)
+                for c in valid_moves:
+                    masked_q[c] = q_values[c]
 
-            # Si ce n’est pas le premier coup
-            if last_state is not None:
+                action = np.argmax(masked_q)
 
-                # Si le joueur courant gagne
-                if reward == 1:
-                    target = -1  # L'ancien joueur perd
-                else:
-                    target = 0
+            next_state, reward, done = env.step(action)
 
-                output = model(last_state)[0][last_action]
-                target_tensor = torch.tensor(target, dtype=torch.float32, device=device)
-                loss = loss_fn(output, target_tensor)
-                optimizer.zero_grad()
-                loss.backward()
-                optimizer.step()
+            memory.append((state, action, reward, next_state, done))
 
-            # Mise à jour normale du joueur courant
-            target = reward
-            if not done:
-                with torch.no_grad():
-                    target += GAMMA * torch.max(model(next_state)).item()
-
-            output = model(state)[0][action]
-            target_tensor = torch.tensor(target, dtype=torch.float32, device=device)
-            loss = loss_fn(output, target_tensor)
-
-            optimizer.zero_grad()
-            loss.backward()
-            optimizer.step()
-
-            last_state = state
-            last_action = action
             state = next_state
+
+            replay()
+
+            step_count += 1
+
+            # ===== Target network update =====
+            if step_count % TARGET_UPDATE == 0:
+                target_net.load_state_dict(policy_net.state_dict())
 
         if EPSILON > EPSILON_MIN:
             EPSILON *= EPSILON_DECAY
-        if episode % 100 == 0:
-            print(f"Episode {episode}")
-        import os
 
-    model_dir = os.path.join(os.path.dirname(__file__), "..", "models")
-    os.makedirs(model_dir, exist_ok=True)
+        if episode % 500 == 0:
+            print(f"Episode {episode} | Epsilon {EPSILON:.3f}")
 
-    model_path = os.path.join(model_dir, "connect4_model.pth")
-    torch.save(model.state_dict(), model_path)
-    print("Self-play training terminé.")
+    print("Training terminé.")
 
 except KeyboardInterrupt:
-    print("Interruption détectée. Sauvegarde du modèle...")
+    print("Interruption...")
 
+# ===== Sauvegarde =====
+import os
+model_dir = os.path.join(os.path.dirname(__file__), "..", "models")
+os.makedirs(model_dir, exist_ok=True)
 
-finally:
-    torch.save(model.state_dict(), model_path)
-    print("Modèle sauvegardé.")
-
-import subprocess
-subprocess.run(["python", "-m", "training_ia.watch_selfplay"])
+torch.save(policy_net.state_dict(), os.path.join(model_dir, "connect4_model.pth"))
+print("Modèle sauvegardé.")
