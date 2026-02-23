@@ -4,8 +4,8 @@ import torch.optim as optim
 import random
 import numpy as np
 
-from model import Connect4Net
-from environment import Connect4SelfPlayEnv
+from training_ia.model import Connect4Net
+from training_ia.environment import Connect4SelfPlayEnv
 
 
 EPISODES = 5000
@@ -77,6 +77,6 @@ for episode in range(EPISODES):
 
     if EPSILON > EPSILON_MIN:
         EPSILON *= EPSILON_DECAY
-        
+
 torch.save(model.state_dict(), "../models/connect4_model.pth")
 print("Self-play training terminé.")
