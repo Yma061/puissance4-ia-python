@@ -10,7 +10,7 @@ from training_ia.environment import Connect4SelfPlayEnv
 from game.board import is_valid_location
 
 # ===== Hyperparamètres =====
-EPISODES = 100000
+EPISODES = 10000
 GAMMA = 0.99
 EPSILON = 1.0
 EPSILON_DECAY = 0.995
